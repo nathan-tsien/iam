@@ -7,9 +7,9 @@
 ## Overview
 
 - Start date: 2026-05-27
-- Current phase: Phase 0
-- Progress: 0 / 16
-- Last updated: 2026-05-27 by bootstrap
+- Current phase: Phase 1
+- Progress: 1 / 16
+- Last updated: 2026-05-27 by bootstrap (P1-T1)
 
 ## Phase 0 · Topology decisions (0.5d)
 
@@ -25,14 +25,14 @@
 
 ## Phase 1 · Carve out iam-service (2-3d)
 
-- [ ] **P1-T1** scaffold-iam-repo — Repository + Go module bootstrap
-  - status: todo
+- [x] **P1-T1** scaffold-iam-repo — Repository + Go module bootstrap
+  - status: done
   - blocked-by: ·
-  - started: ·
-  - finished: ·
-  - commit: ·
+  - started: 2026-05-27
+  - finished: 2026-05-27
+  - commit: nathan-tsien/iam@294eb7e
   - PR: ·
-  - note: Mark done after initial bootstrap commit lands.
+  - note: Bootstrap commit — docs, skeleton dirs, go.mod, extraction-plan copy, tracker.
 
 - [ ] **P1-T2** trim-user-model — Remove `agent_memory_paused` / `tier` from User model when copying from family-office
   - status: todo
