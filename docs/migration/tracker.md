@@ -50,7 +50,7 @@
   - blocked-by: ·
   - started: 2026-05-27
   - finished: 2026-05-27
-  - commit: ·
+  - commit: nathan-tsien/iam@0694060
   - PR: ·
   - note: Goose migration `00001_baseline.sql`; seeds system app `_iam`.
 
@@ -59,7 +59,7 @@
   - blocked-by: ·
   - started: 2026-05-27
   - finished: 2026-05-27
-  - commit: ·
+  - commit: nathan-tsien/iam@0694060
   - PR: ·
   - note: Separate binary; per-app HMAC secret printed once on create.
 
