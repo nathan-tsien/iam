@@ -13,16 +13,23 @@ Operating manual for AI coding agents working on the **iam** repository.
 
 It is **not** a billing service, subscription engine, or host for product-specific business logic.
 
-Extraction source: `family-office-platform/backend`. Progress: **`docs/migration/tracker.md`**.
+Implementation progress: **`docs/migration/tracker.md`**.
 
 ## Documentation conventions
 
-- **`AGENTS.md` / `CLAUDE.md` / `README.md` / `ARCHITECTURE.md`**: English.
-- **`docs/adr/`**: English (Status, Context, Decision, Consequences).
-- **Code comments and logs**: English only.
-- **User-facing API strings**: English (product UIs localize at the consumer layer).
+Language policy:
 
-Use ASCII `-` for bullets and `1.` for ordered lists in prose docs.
+- **All repository documentation is English** — `AGENTS.md`, `CLAUDE.md`, `README.md`, `ARCHITECTURE.md`, every file under `docs/adr/`, `docs/migration/tracker.md`, and `docs/migration/implementation-path.md`.
+- **Sole exception**: Superpower spec / plan files (markdown files carrying a Superpower YAML frontmatter with `name`, `overview`, `todos`, `status` keys). These may be authored in the operator's working language.
+- **Code comments, log messages, and user-facing API strings**: English only.
+
+Naming policy:
+
+- Do not name specific downstream consumer applications in repository docs. Use generic terms (`consumer application`, `downstream app`, `consumer product`). Specific deployment targets belong in operator-owned runbooks, not in this repository.
+
+Format:
+
+- ASCII `-` for bullets, `1.` for ordered lists in prose docs.
 
 ## Inviolable scope guardrails
 
@@ -30,7 +37,7 @@ Stop and ask before crossing these lines:
 
 1. **No billing or subscriptions** in this repository.
 2. **No product business logic** (projects, skills, agent chat, approvals, notifications, etc.).
-3. **No consumer imports** — do not depend on `family-office-platform`, `ash`, or `cogito` Go/TS modules.
+3. **No consumer imports** — do not depend on any consumer application Go or TypeScript modules.
 4. **No business fields on `User`** — fields like `agent_memory_paused` belong in consumer apps, not IAM.
 5. **Provider adapters are additive** — Clerk / Wechat / Authing come via new ADRs, not ad-hoc routes.
 
@@ -57,7 +64,7 @@ Dependency direction: **`httpapi` → `service` → `repo` → `auth`**. Reverse
 ## Testing posture
 
 - Every new `repo` and `service` package ships with `_test.go` coverage for happy path + primary failure modes.
-- DB-backed tests: run with **`go test -p 1 ./...`** when sharing one test database (same discipline as family-office backend).
+- DB-backed tests: run with **`go test -p 1 ./...`** when one shared test database is reused across packages.
 - Do not `t.Skip` to unblock CI without an ADR note or maintainer approval.
 
 ## Commands
@@ -73,8 +80,9 @@ make migrate-up
 
 1. `make lint` and `make test` succeed for impacted packages.
 2. Update **`docs/migration/tracker.md`** (status, dates, commit ref).
-3. Update **`docs/adr/`** if architecture intent changed (supersede, do not rewrite accepted ADRs).
-4. Keep **`docs/migration/extraction-plan.md`** aligned with observable behavior when the plan itself changes.
+3. Keep **`docs/migration/implementation-path.md`** aligned when wave boundaries or ADR gates change.
+4. Update **`docs/adr/`** if architecture intent changed (supersede, do not rewrite accepted ADRs).
+5. Keep **`docs/migration/extraction-plan.md`** aligned with observable behavior when the plan itself changes.
 
 ## When uncertain
 
