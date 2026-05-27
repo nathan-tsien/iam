@@ -6,11 +6,11 @@ Accepted
 
 ## Context
 
-The family-office-platform backend contains a mature authentication and user-management module (JWT sessions, OTP email verification, refresh-token rotation, admin disable/enable, profile and avatar self-service).
+A mature authentication and user-management module already exists in a prior production codebase (JWT sessions, OTP email verification, refresh-token rotation, admin disable / enable, profile and avatar self-service). It is ready to be lifted out and reused.
 
-Multiple product MVPs (family-office, ash, future apps) need the same IAM capabilities without duplicating code or coupling product databases to auth tables.
+Multiple independent consumer applications need the same IAM capabilities without duplicating code or coupling their product databases to authentication tables.
 
-Extraction plan: [docs/migration/extraction-plan.md](../migration/extraction-plan.md).
+Implementation plan: [docs/migration/extraction-plan.md](../migration/extraction-plan.md).
 
 ## Decision
 
@@ -27,8 +27,8 @@ Explicitly **OUT of scope** (reject in review):
 
 - Subscription, billing, payments, entitlements
 - Product business logic (projects, skills, agent chat, agent memory, approvals, notifications, ...)
-- OAuth / SSO provider implementations (add via future provider ADRs only)
-- Tenancy and multi-region routing (JWT claim extensions deferred to ADR-0002+)
+- OAuth / SSO provider implementations (add via Phase 2+ provider ADRs; schema reserved in Phase 1)
+- Multi-region routing (deferred; per-app tenancy decided in ADR-0002)
 - Consumer-side `users_local` cache (owned by each product repo)
 
 ## Consequences
@@ -39,5 +39,6 @@ Explicitly **OUT of scope** (reject in review):
 
 ## Related
 
+- [ADR-0002: Multi-app tenancy and identity model](./0002-multi-app-and-identity-model.md)
 - [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - [docs/migration/tracker.md](../migration/tracker.md)

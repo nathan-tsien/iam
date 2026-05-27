@@ -1,5 +1,5 @@
 # Go
-/bin/
+bin/
 /dist/
 *.exe
 *.test
