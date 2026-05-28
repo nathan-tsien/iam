@@ -65,3 +65,9 @@ func (s *Signer) Verify(tokenStr string) (*Claims, error) {
 	}
 	return claims, nil
 }
+
+// UserID parses the Subject claim as a UUID.
+func (c *Claims) UserID() uuid.UUID {
+	id, _ := uuid.Parse(c.Subject)
+	return id
+}
