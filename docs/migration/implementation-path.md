@@ -20,8 +20,8 @@ Companion artifacts:
 ## Current position
 
 ```
-Done:  P1-T1 scaffold, P0-T1 ADR-0002
-Next:  Wave 1 — infrastructure (no new ADR required)
+Done:  Waves 1–4
+Next:  Wave 5 — sessions, history, account deletion
 ```
 
 ## Working assumptions (not yet ADR-0003)
