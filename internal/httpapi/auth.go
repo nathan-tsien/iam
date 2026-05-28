@@ -2,24 +2,50 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/nathan-tsien/iam/internal/errs"
 	"github.com/nathan-tsien/iam/internal/middleware"
+	"github.com/nathan-tsien/iam/internal/ratelimit"
 	"github.com/nathan-tsien/iam/internal/repo/user"
 	"github.com/nathan-tsien/iam/internal/service/auth"
 )
 
+// rateLimitKey returns a rate limit key scoped to the current app.
+func rateLimitKey(c *gin.Context, suffix string) string {
+	app, ok := middleware.GetApp(c)
+	if !ok {
+		return "unknown:" + suffix
+	}
+	return app.ID.String() + ":" + suffix
+}
+
 // RegisterAuth mounts auth endpoints on the router.
-func RegisterAuth(r *gin.RouterGroup, authSvc *auth.Service) {
-	r.POST("/auth/register", handleRegister(authSvc))
+// When store is non-nil, rate limiting is applied to login, register, and
+// password-forgot routes.
+func RegisterAuth(r *gin.RouterGroup, authSvc *auth.Service, store ratelimit.Store) {
+	if store != nil {
+		r.POST("/auth/login",
+			middleware.RateLimit(store, 5, time.Minute, func(c *gin.Context) string { return rateLimitKey(c, "login") }),
+			handleLogin(authSvc))
+		r.POST("/auth/register",
+			middleware.RateLimit(store, 3, time.Minute, func(c *gin.Context) string { return rateLimitKey(c, "register") }),
+			handleRegister(authSvc))
+		r.POST("/auth/password/forgot",
+			middleware.RateLimit(store, 3, time.Minute, func(c *gin.Context) string { return rateLimitKey(c, "forgot") }),
+			handleForgotPassword(authSvc))
+	} else {
+		r.POST("/auth/login", handleLogin(authSvc))
+		r.POST("/auth/register", handleRegister(authSvc))
+		r.POST("/auth/password/forgot", handleForgotPassword(authSvc))
+	}
+
 	r.POST("/auth/check-availability", handleCheckAvailability(authSvc))
 	r.POST("/auth/otp/verify", handleVerifyOTP(authSvc))
-	r.POST("/auth/login", handleLogin(authSvc))
 	r.POST("/auth/refresh", handleRefresh(authSvc))
 	r.POST("/auth/logout", handleLogout(authSvc))
-	r.POST("/auth/password/forgot", handleForgotPassword(authSvc))
 	r.POST("/auth/password/reset", handleResetPassword(authSvc))
 }
 

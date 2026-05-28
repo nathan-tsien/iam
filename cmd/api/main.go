@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 
 	pkgauth "github.com/nathan-tsien/iam/internal/auth"
 	"github.com/nathan-tsien/iam/internal/config"
@@ -18,6 +19,9 @@ import (
 	"github.com/nathan-tsien/iam/internal/httpapi"
 	"github.com/nathan-tsien/iam/internal/middleware"
 	"github.com/nathan-tsien/iam/internal/provider/mail"
+	"github.com/nathan-tsien/iam/internal/ratelimit"
+	"github.com/nathan-tsien/iam/internal/ratelimit/memory"
+	ratelimitredis "github.com/nathan-tsien/iam/internal/ratelimit/redis"
 	apprepo "github.com/nathan-tsien/iam/internal/repo/app"
 	refreshrepo "github.com/nathan-tsien/iam/internal/repo/refresh"
 	userrepo "github.com/nathan-tsien/iam/internal/repo/user"
@@ -78,11 +82,26 @@ func main() {
 		RefreshTTL:  cfg.RefreshTTL,
 	})
 
+	// --- Rate limiting ---
+	var rlStore ratelimit.Store
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL != "" {
+		opt, err := redis.ParseURL(redisURL)
+		if err != nil {
+			slog.Error("parse redis url", "error", err)
+			os.Exit(1)
+		}
+		redisClient := redis.NewClient(opt)
+		rlStore = ratelimitredis.NewStore(redisClient)
+	} else {
+		rlStore = memory.NewStore()
+	}
+
 	// --- Route mounting ---
 	appRepo := apprepo.NewRepo(gormDB)
 	v1 := router.Group("/v1/apps/:slug")
 	v1.Use(middleware.AppSlugMiddleware(appRepo))
-	httpapi.RegisterAuth(v1, authSvc)
+	httpapi.RegisterAuth(v1, authSvc, rlStore)
 
 	// --- Server ---
 	addr := fmt.Sprintf(":%d", cfg.AppPort)
