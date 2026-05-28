@@ -16,6 +16,12 @@ type Config struct {
 	JWTSecret      string
 	JWTTTL         time.Duration
 	RefreshTTL     time.Duration
+	SMTPHost       string
+	SMTPPort       int
+	SMTPUsername   string
+	SMTPPassword   string
+	SMTPFromAddr   string
+	SMTPFromName   string
 }
 
 // Load reads configuration from environment variables.
@@ -70,6 +76,15 @@ func Load() (Config, error) {
 		refreshTTL = d
 	}
 
+	smtpPort := 465
+	if raw := os.Getenv("SMTP_PORT"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("parse SMTP_PORT: %w", err)
+		}
+		smtpPort = parsed
+	}
+
 	return Config{
 		AppEnv:         env,
 		AppPort:        port,
@@ -78,5 +93,11 @@ func Load() (Config, error) {
 		JWTSecret:      jwtSecret,
 		JWTTTL:         jwtTTL,
 		RefreshTTL:     refreshTTL,
+		SMTPHost:       os.Getenv("SMTP_HOST"),
+		SMTPPort:       smtpPort,
+		SMTPUsername:   os.Getenv("SMTP_USERNAME"),
+		SMTPPassword:   os.Getenv("SMTP_PASSWORD"),
+		SMTPFromAddr:   os.Getenv("SMTP_FROM_ADDR"),
+		SMTPFromName:   os.Getenv("SMTP_FROM_NAME"),
 	}, nil
 }

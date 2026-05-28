@@ -49,7 +49,25 @@ func main() {
 	// --- Auth wiring ---
 	userRepo := userrepo.NewRepo(gormDB)
 	refreshRepo := refreshrepo.NewRepo(gormDB)
-	mailer := &mail.LogMailer{}
+	var mailer mail.Mailer
+	if cfg.AppEnv == "production" {
+		smtpCfg := mail.SMTPConfig{
+			Host:        cfg.SMTPHost,
+			Port:        cfg.SMTPPort,
+			User:        cfg.SMTPUsername,
+			Password:    cfg.SMTPPassword,
+			FromAddress: cfg.SMTPFromAddr,
+			FromName:    cfg.SMTPFromName,
+			Timeout:     10 * time.Second,
+		}
+		mailer, err = mail.NewSMTPMailer(smtpCfg, slog.Default())
+		if err != nil {
+			slog.Error("init smtp mailer", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		mailer = &mail.LogMailer{}
+	}
 	otpSvc := otp.NewService(gormDB, mailer, 10*time.Minute)
 	signer := pkgauth.NewSigner(cfg.JWTSecret, cfg.JWTTTL)
 	authSvc := authsvc.NewService(authsvc.Deps{
