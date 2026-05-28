@@ -8,9 +8,9 @@
 ## Overview
 
 - Start date: 2026-05-27
-- Current phase: Phase 1 (Wave 2 complete)
+- Current phase: Phase 1 (Wave 3 complete)
 - Progress: 6 / 19
-- Last updated: 2026-05-28 (Wave 2 complete)
+- Last updated: 2026-05-28 (Wave 3 complete)
 
 ## Phase 0 · Design decisions (0.5d)
 
