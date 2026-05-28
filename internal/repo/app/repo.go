@@ -99,17 +99,14 @@ func (r *Repo) Disable(ctx context.Context, slug string) error {
 	return nil
 }
 
-// FindBySlug returns one app row.
-func (r *Repo) FindBySlug(ctx context.Context, slug string) (Model, error) {
-	var row Model
-	err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return Model{}, fmt.Errorf("app %q not found", slug)
-	}
+// FindBySlug returns the app with the given slug, or gorm.ErrRecordNotFound.
+func (r *Repo) FindBySlug(ctx context.Context, slug string) (*Model, error) {
+	var m Model
+	err := r.db.WithContext(ctx).Where("slug = ?", slug).First(&m).Error
 	if err != nil {
-		return Model{}, fmt.Errorf("find app: %w", err)
+		return nil, err
 	}
-	return row, nil
+	return &m, nil
 }
 
 // SystemAppSlug is the reserved slug for super-admin operators.

@@ -1,0 +1,4 @@
+Subject: Your verification code
+Your verification code is: {{.Code}}
+Purpose: {{.Purpose}}
+This code expires in 10 minutes.
