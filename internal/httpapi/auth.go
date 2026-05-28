@@ -19,6 +19,8 @@ func RegisterAuth(r *gin.RouterGroup, authSvc *auth.Service) {
 	r.POST("/auth/login", handleLogin(authSvc))
 	r.POST("/auth/refresh", handleRefresh(authSvc))
 	r.POST("/auth/logout", handleLogout(authSvc))
+	r.POST("/auth/password/forgot", handleForgotPassword(authSvc))
+	r.POST("/auth/password/reset", handleResetPassword(authSvc))
 }
 
 func handleRegister(authSvc *auth.Service) gin.HandlerFunc {
@@ -220,5 +222,60 @@ func handleLogout(authSvc *auth.Service) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"logged_out": true})
+	}
+}
+
+func handleForgotPassword(authSvc *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		app, ok := middleware.GetApp(c)
+		if !ok {
+			errs.Render(c, errs.New(http.StatusInternalServerError, "INTERNAL", "App not in context"))
+			return
+		}
+
+		var req struct {
+			Email string `json:"email" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			errs.Render(c, errs.New(http.StatusBadRequest, "INVALID_REQUEST", err.Error()))
+			return
+		}
+
+		// Always return 200 to prevent user enumeration
+		_ = authSvc.ForgotPassword(c.Request.Context(), app.ID, req.Email)
+		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a reset code has been sent"})
+	}
+}
+
+func handleResetPassword(authSvc *auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		app, ok := middleware.GetApp(c)
+		if !ok {
+			errs.Render(c, errs.New(http.StatusInternalServerError, "INTERNAL", "App not in context"))
+			return
+		}
+
+		var req struct {
+			Email       string `json:"email" binding:"required"`
+			Code        string `json:"code" binding:"required"`
+			NewPassword string `json:"new_password" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			errs.Render(c, errs.New(http.StatusBadRequest, "INVALID_REQUEST", err.Error()))
+			return
+		}
+
+		if err := authSvc.ResetPassword(c.Request.Context(), app.ID, req.Email, req.Code, req.NewPassword); err != nil {
+			switch e := err.(type) {
+			case *auth.ErrWeakPassword:
+				errs.Render(c, errs.New(http.StatusBadRequest, "WEAK_PASSWORD", "Password does not meet requirements").
+					WithDetails(map[string]any{"failed_rules": e.FailedRules}))
+			default:
+				errs.Render(c, errs.New(http.StatusBadRequest, "INVALID_OTP", "Invalid or expired reset code"))
+			}
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully"})
 	}
 }
