@@ -12,9 +12,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	pkgauth "github.com/nathan-tsien/iam/internal/auth"
 	"github.com/nathan-tsien/iam/internal/config"
 	"github.com/nathan-tsien/iam/internal/db"
 	"github.com/nathan-tsien/iam/internal/httpapi"
+	"github.com/nathan-tsien/iam/internal/middleware"
+	"github.com/nathan-tsien/iam/internal/provider/mail"
+	apprepo "github.com/nathan-tsien/iam/internal/repo/app"
+	refreshrepo "github.com/nathan-tsien/iam/internal/repo/refresh"
+	userrepo "github.com/nathan-tsien/iam/internal/repo/user"
+	authsvc "github.com/nathan-tsien/iam/internal/service/auth"
+	"github.com/nathan-tsien/iam/internal/service/otp"
 )
 
 func main() {
@@ -38,6 +46,27 @@ func main() {
 	router.Use(gin.Recovery())
 	httpapi.RegisterHealth(router, gormDB)
 
+	// --- Auth wiring ---
+	userRepo := userrepo.NewRepo(gormDB)
+	refreshRepo := refreshrepo.NewRepo(gormDB)
+	mailer := &mail.LogMailer{}
+	otpSvc := otp.NewService(gormDB, mailer, 10*time.Minute)
+	signer := pkgauth.NewSigner(cfg.JWTSecret, cfg.JWTTTL)
+	authSvc := authsvc.NewService(authsvc.Deps{
+		UserRepo:    userRepo,
+		RefreshRepo: refreshRepo,
+		OTP:         otpSvc,
+		Signer:      signer,
+		RefreshTTL:  cfg.RefreshTTL,
+	})
+
+	// --- Route mounting ---
+	appRepo := apprepo.NewRepo(gormDB)
+	v1 := router.Group("/v1/apps/:slug")
+	v1.Use(middleware.AppSlugMiddleware(appRepo))
+	httpapi.RegisterAuth(v1, authSvc)
+
+	// --- Server ---
 	addr := fmt.Sprintf(":%d", cfg.AppPort)
 	srv := &http.Server{
 		Addr:              addr,

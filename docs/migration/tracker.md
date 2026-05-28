@@ -8,9 +8,9 @@
 ## Overview
 
 - Start date: 2026-05-27
-- Current phase: Phase 1 (Wave 2 next)
-- Progress: 4 / 19
-- Last updated: 2026-05-27 (Wave 1 complete)
+- Current phase: Phase 1 (Wave 2 complete)
+- Progress: 6 / 19
+- Last updated: 2026-05-28 (Wave 2 complete)
 
 ## Phase 0 · Design decisions (0.5d)
 
@@ -63,21 +63,21 @@
   - PR: ·
   - note: Separate binary; per-app HMAC secret printed once on create.
 
-- [ ] **P1-T4** lift-auth-modules — Lift auth/otp/userprofile/useradmin from source; drop product fields (`agent_memory_paused`, `tier`); scope all queries by `app_id`
-  - status: todo
+- [x] **P1-T4** lift-auth-modules — Lift auth/otp from source; drop product fields (`agent_memory_paused`, `tier`); scope all queries by `app_id`
+  - status: done
   - blocked-by: P1-T2
-  - started: ·
-  - finished: ·
-  - commit: ·
+  - started: 2026-05-28
+  - finished: 2026-05-28
+  - commit: worktree-wave2-auth
   - PR: ·
-  - note: Phase 1 keeps email on `users.email`; `user_identities` not written.
+  - note: Lifted internal/auth, repo/user, repo/refresh, service/auth, service/otp. Userprofile/useradmin deferred to Wave 4.
 
-- [ ] **P1-T5** iam-cmd-main — Wire `cmd/api/main.go` with app-slug middleware, JWT `aud`, mail/storage/ratelimit per app
-  - status: todo
+- [x] **P1-T5** iam-cmd-main — Wire `cmd/api/main.go` with app-slug middleware, JWT `aud`, auth service
+  - status: done
   - blocked-by: P1-T4
-  - started: ·
-  - finished: ·
-  - commit: ·
+  - started: 2026-05-28
+  - finished: 2026-05-28
+  - commit: worktree-wave2-auth
   - PR: ·
   - note: ·
 
