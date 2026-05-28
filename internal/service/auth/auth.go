@@ -224,6 +224,49 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	return err
 }
 
+// ForgotPassword sends a password reset OTP. Returns nil even if email
+// doesn't exist to prevent user enumeration.
+func (s *Service) ForgotPassword(ctx context.Context, appID uuid.UUID, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	u, err := s.UserRepo.FindByEmail(ctx, appID, email)
+	if err != nil {
+		if errors.Is(err, userrepo.ErrNotFound) {
+			return nil // Don't leak user existence
+		}
+		return err
+	}
+	if !u.EmailVerified() {
+		return nil // Don't leak unverified status
+	}
+	// Ignore OTP send errors to prevent enumeration
+	_ = s.OTP.Issue(ctx, appID, email, mail.PurposePasswordReset)
+	return nil
+}
+
+// ResetPassword verifies the reset OTP and sets a new password.
+func (s *Service) ResetPassword(ctx context.Context, appID uuid.UUID, email, code, newPassword string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if fails := passwordpolicy.Validate(newPassword); len(fails) > 0 {
+		return &ErrWeakPassword{FailedRules: fails}
+	}
+	if err := s.OTP.Consume(ctx, appID, email, code, mail.PurposePasswordReset); err != nil {
+		return err
+	}
+	u, err := s.UserRepo.FindByEmail(ctx, appID, email)
+	if err != nil {
+		return err
+	}
+	hash, err := pkgauth.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	if err := s.UserRepo.UpdatePassword(ctx, appID, u.ID, hash); err != nil {
+		return err
+	}
+	// Revoke all refresh tokens after password reset
+	return s.RefreshRepo.RevokeAllForUser(ctx, u.ID)
+}
+
 func (s *Service) issueTokens(ctx context.Context, appID uuid.UUID, u *model.User, audience string) (*LoginTokens, error) {
 	access, err := s.Signer.Sign(u.ID, string(u.Role), audience)
 	if err != nil {
