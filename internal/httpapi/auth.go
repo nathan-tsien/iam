@@ -171,7 +171,7 @@ func handleLogin(authSvc *auth.Service) gin.HandlerFunc {
 			return
 		}
 
-		tokens, err := authSvc.Login(c.Request.Context(), app.ID, req.Email, req.Password, app.JWTAudience)
+		tokens, err := authSvc.Login(c.Request.Context(), app.ID, req.Email, req.Password, app.JWTAudience, c.ClientIP(), c.GetHeader("User-Agent"))
 		if err != nil {
 			switch err {
 			case auth.ErrInvalidCredentials:
@@ -242,7 +242,7 @@ func handleLogout(authSvc *auth.Service) gin.HandlerFunc {
 			return
 		}
 
-		if err := authSvc.Logout(c.Request.Context(), req.RefreshToken); err != nil {
+		if err := authSvc.Logout(c.Request.Context(), req.RefreshToken, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 			errs.Render(c, errs.New(http.StatusInternalServerError, "INTERNAL", "Internal server error").WithCause(err))
 			return
 		}

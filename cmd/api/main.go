@@ -23,6 +23,7 @@ import (
 	"github.com/nathan-tsien/iam/internal/ratelimit/memory"
 	ratelimitredis "github.com/nathan-tsien/iam/internal/ratelimit/redis"
 	apprepo "github.com/nathan-tsien/iam/internal/repo/app"
+	logineventrepo "github.com/nathan-tsien/iam/internal/repo/loginevent"
 	refreshrepo "github.com/nathan-tsien/iam/internal/repo/refresh"
 	userrepo "github.com/nathan-tsien/iam/internal/repo/user"
 	authsvc "github.com/nathan-tsien/iam/internal/service/auth"
@@ -74,12 +75,14 @@ func main() {
 	}
 	otpSvc := otp.NewService(gormDB, mailer, 10*time.Minute)
 	signer := pkgauth.NewSigner(cfg.JWTSecret, cfg.JWTTTL)
+	loginEventRepo := logineventrepo.NewRepo(gormDB)
 	authSvc := authsvc.NewService(authsvc.Deps{
-		UserRepo:    userRepo,
-		RefreshRepo: refreshRepo,
-		OTP:         otpSvc,
-		Signer:      signer,
-		RefreshTTL:  cfg.RefreshTTL,
+		UserRepo:       userRepo,
+		RefreshRepo:    refreshRepo,
+		OTP:            otpSvc,
+		Signer:         signer,
+		RefreshTTL:     cfg.RefreshTTL,
+		LoginEventRepo: loginEventRepo,
 	})
 
 	// --- Rate limiting ---

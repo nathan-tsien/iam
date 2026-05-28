@@ -13,6 +13,7 @@ import (
 	"github.com/nathan-tsien/iam/internal/auth/passwordpolicy"
 	"github.com/nathan-tsien/iam/internal/model"
 	"github.com/nathan-tsien/iam/internal/provider/mail"
+	"github.com/nathan-tsien/iam/internal/repo/loginevent"
 	"github.com/nathan-tsien/iam/internal/repo/refresh"
 	userrepo "github.com/nathan-tsien/iam/internal/repo/user"
 	"github.com/nathan-tsien/iam/internal/service/otp"
@@ -35,11 +36,12 @@ func (e *ErrWeakPassword) Error() string {
 }
 
 type Deps struct {
-	UserRepo    *userrepo.Repo
-	RefreshRepo *refresh.Repo
-	OTP         *otp.Service
-	Signer      *pkgauth.Signer
-	RefreshTTL  time.Duration
+	UserRepo       *userrepo.Repo
+	RefreshRepo    *refresh.Repo
+	OTP            *otp.Service
+	Signer         *pkgauth.Signer
+	RefreshTTL     time.Duration
+	LoginEventRepo *loginevent.Repo
 }
 
 type Service struct {
@@ -174,16 +176,28 @@ type LoginTokens struct {
 }
 
 // Login verifies credentials and issues tokens.
-func (s *Service) Login(ctx context.Context, appID uuid.UUID, email, plaintextPassword, audience string) (*LoginTokens, error) {
+func (s *Service) Login(ctx context.Context, appID uuid.UUID, email, plaintextPassword, audience, ip, userAgent string) (*LoginTokens, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 	u, err := s.UserRepo.FindByEmail(ctx, appID, email)
 	if err != nil {
 		if errors.Is(err, userrepo.ErrNotFound) {
+			// Record failure event (best-effort)
+			if s.LoginEventRepo != nil {
+				go func() {
+					_ = s.LoginEventRepo.Record(context.Background(), appID, nil, "login_failure", ip, userAgent)
+				}()
+			}
 			return nil, ErrInvalidCredentials
 		}
 		return nil, err
 	}
 	if err := pkgauth.VerifyPassword(u.PasswordHash, plaintextPassword); err != nil {
+		// Record failure event (best-effort)
+		if s.LoginEventRepo != nil {
+			go func() {
+				_ = s.LoginEventRepo.Record(context.Background(), appID, nil, "login_failure", ip, userAgent)
+			}()
+		}
 		return nil, ErrInvalidCredentials
 	}
 	if !u.EmailVerified() {
@@ -192,6 +206,14 @@ func (s *Service) Login(ctx context.Context, appID uuid.UUID, email, plaintextPa
 	if u.Disabled() {
 		return nil, ErrAccountDisabled
 	}
+
+	// Record success event (best-effort)
+	if s.LoginEventRepo != nil {
+		go func() {
+			_ = s.LoginEventRepo.Record(context.Background(), appID, &u.ID, "login_success", ip, userAgent)
+		}()
+	}
+
 	return s.issueTokens(ctx, appID, u, audience)
 }
 
@@ -216,11 +238,29 @@ func (s *Service) Refresh(ctx context.Context, refreshToken, audience string) (*
 }
 
 // Logout revokes the given refresh token. Idempotent.
-func (s *Service) Logout(ctx context.Context, refreshToken string) error {
+func (s *Service) Logout(ctx context.Context, refreshToken, ip, userAgent string) error {
+	// Look up token info before revoking (for event recording).
+	var eventAppID uuid.UUID
+	var eventUserID *uuid.UUID
+	if s.LoginEventRepo != nil {
+		if tok, err := s.RefreshRepo.Lookup(ctx, refreshToken); err == nil {
+			eventAppID = tok.AppID
+			eventUserID = &tok.UserID
+		}
+	}
+
 	err := s.RefreshRepo.Revoke(ctx, refreshToken)
 	if errors.Is(err, refresh.ErrNotFound) {
 		return nil
 	}
+
+	// Record logout event (best-effort)
+	if s.LoginEventRepo != nil && eventUserID != nil {
+		go func() {
+			_ = s.LoginEventRepo.Record(context.Background(), eventAppID, eventUserID, "logout", ip, userAgent)
+		}()
+	}
+
 	return err
 }
 
