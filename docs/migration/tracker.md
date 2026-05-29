@@ -90,14 +90,14 @@
   - PR: ·
   - note: OpenAPI spec, oapi-codegen, StrictServerInterface, strict middleware, old handler removal.
 
-- [ ] **P1-T7** sessions-and-account — Sessions list/revoke, login history, self-delete (soft + anonymize + webhook)
-  - status: todo
-  - blocked-by: P1-T5
-  - started: ·
-  - finished: ·
-  - commit: ·
+- [x] **P1-T7** sessions-and-account — Sessions list/revoke, login history, self-delete (soft + anonymize + webhook)
+  - status: done
+  - blocked-by: ·
+  - started: 2026-05-30
+  - finished: 2026-05-30
+  - commit: main
   - PR: ·
-  - note: `login_events` writes are non-blocking.
+  - note: `login_events` writes are non-blocking. Webhook outbox deferred to Wave 6.
 
 - [ ] **P1-T8** iam-internal-api — Per-app HMAC internal user API + webhook outbox + retry job
   - status: todo

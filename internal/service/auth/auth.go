@@ -214,7 +214,7 @@ func (s *Service) Login(ctx context.Context, appID uuid.UUID, email, plaintextPa
 		}()
 	}
 
-	return s.issueTokens(ctx, appID, u, audience)
+	return s.issueTokens(ctx, appID, u, audience, ip, userAgent)
 }
 
 // Refresh rotates a refresh token and issues a new access token.
@@ -307,12 +307,15 @@ func (s *Service) ResetPassword(ctx context.Context, appID uuid.UUID, email, cod
 	return s.RefreshRepo.RevokeAllForUser(ctx, u.ID)
 }
 
-func (s *Service) issueTokens(ctx context.Context, appID uuid.UUID, u *model.User, audience string) (*LoginTokens, error) {
+func (s *Service) issueTokens(ctx context.Context, appID uuid.UUID, u *model.User, audience, ip, userAgent string) (*LoginTokens, error) {
 	access, err := s.Signer.Sign(u.ID, string(u.Role), audience)
 	if err != nil {
 		return nil, err
 	}
-	refreshPlain, err := s.RefreshRepo.Generate(ctx, appID, u.ID, s.RefreshTTL)
+	refreshPlain, err := s.RefreshRepo.Generate(ctx, appID, u.ID, s.RefreshTTL, refresh.TokenMetadata{
+		UserAgent: userAgent,
+		IP:        ip,
+	})
 	if err != nil {
 		return nil, err
 	}

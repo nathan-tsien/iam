@@ -49,13 +49,17 @@ func TestAuthRequiredOpsContent(t *testing.T) {
 		"DisableUser":          true,
 		"EnableUser":           true,
 		"TriggerPasswordReset": true,
+		"GetMeSessions":        true,
+		"DeleteMeSession":      true,
+		"DeleteMeSessions":     true,
+		"GetMeLoginHistory":    true,
+		"DeleteMe":             true,
 	}
 	for op, want := range expected {
 		if got := authRequiredOps[op]; got != want {
 			t.Errorf("authRequiredOps[%q] = %v, want %v", op, got, want)
 		}
 	}
-	// Verify no unexpected operations are in authRequiredOps
 	for op := range authRequiredOps {
 		if _, ok := expected[op]; !ok {
 			t.Errorf("authRequiredOps contains unexpected operation %q", op)
@@ -93,6 +97,7 @@ func TestRateLimitOpsConfig(t *testing.T) {
 		{"Login", 5, time.Minute},
 		{"ForgotPassword", 3, time.Minute},
 		{"ListUsers", 100, time.Minute},
+		{"DeleteMe", 5, time.Minute},
 	}
 
 	for _, tt := range tests {
@@ -109,8 +114,9 @@ func TestRateLimitOpsConfig(t *testing.T) {
 		}
 	}
 
-	// Verify no unexpected operations
-	expectedOps := map[string]bool{"Register": true, "Login": true, "ForgotPassword": true, "ListUsers": true}
+	expectedOps := map[string]bool{
+		"Register": true, "Login": true, "ForgotPassword": true, "ListUsers": true, "DeleteMe": true,
+	}
 	for op := range rateLimitOps {
 		if !expectedOps[op] {
 			t.Errorf("rateLimitOps contains unexpected operation %q", op)

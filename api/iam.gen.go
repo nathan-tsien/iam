@@ -128,6 +128,11 @@ type CheckAvailabilityResponse struct {
 	EmailAvailable       *bool `json:"email_available,omitempty"`
 }
 
+// DeleteMeRequest defines model for DeleteMeRequest.
+type DeleteMeRequest struct {
+	Password string `json:"password"`
+}
+
 // DisabledResponse defines model for DisabledResponse.
 type DisabledResponse struct {
 	Disabled DisabledResponseDisabled `json:"disabled"`
@@ -158,6 +163,21 @@ type Error struct {
 // ForgotPasswordRequest defines model for ForgotPasswordRequest.
 type ForgotPasswordRequest struct {
 	Email openapi_types.Email `json:"email"`
+}
+
+// LoginEventSchema defines model for LoginEventSchema.
+type LoginEventSchema struct {
+	Id         openapi_types.UUID `json:"id"`
+	Ip         *string            `json:"ip,omitempty"`
+	Kind       string             `json:"kind"`
+	OccurredAt time.Time          `json:"occurred_at"`
+	UserAgent  *string            `json:"user_agent,omitempty"`
+}
+
+// LoginHistoryResponse defines model for LoginHistoryResponse.
+type LoginHistoryResponse struct {
+	Events     []LoginEventSchema `json:"events"`
+	NextCursor *time.Time         `json:"next_cursor,omitempty"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -208,6 +228,22 @@ type ResetPasswordRequest struct {
 	Code        string              `json:"code"`
 	Email       openapi_types.Email `json:"email"`
 	NewPassword string              `json:"new_password"`
+}
+
+// Session defines model for Session.
+type Session struct {
+	CreatedAt   time.Time          `json:"created_at"`
+	DeviceLabel *string            `json:"device_label,omitempty"`
+	Id          openapi_types.UUID `json:"id"`
+	Ip          *string            `json:"ip,omitempty"`
+	IsCurrent   bool               `json:"is_current"`
+	LastSeenAt  *time.Time         `json:"last_seen_at,omitempty"`
+	UserAgent   *string            `json:"user_agent,omitempty"`
+}
+
+// SessionsResponse defines model for SessionsResponse.
+type SessionsResponse struct {
+	Sessions []Session `json:"sessions"`
 }
 
 // TokenResponse defines model for TokenResponse.
@@ -287,6 +323,21 @@ type Unauthenticated = Error
 // bearerAuthContextKey is the context key for BearerAuth security scheme
 type bearerAuthContextKey string
 
+// GetMeLoginHistoryParams defines parameters for GetMeLoginHistory.
+type GetMeLoginHistoryParams struct {
+	// Cursor Cursor from previous response (ISO 8601 timestamp)
+	Cursor *time.Time `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit Number of results per page (1-100, default 20)
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetMeSessionsParams defines parameters for GetMeSessions.
+type GetMeSessionsParams struct {
+	// XSessionToken Current refresh token (used to identify the current session)
+	XSessionToken *string `json:"X-Session-Token,omitempty"`
+}
+
 // ListUsersParams defines parameters for ListUsers.
 type ListUsersParams struct {
 	// Q Search query (matches email or display name)
@@ -326,6 +377,9 @@ type RegisterJSONRequestBody = RegisterRequest
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
 
+// DeleteMeJSONRequestBody defines body for DeleteMe for application/json ContentType.
+type DeleteMeJSONRequestBody = DeleteMeRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Check email and display name availability
@@ -358,6 +412,21 @@ type ServerInterface interface {
 	// Update display name and/or avatar URL
 	// (PATCH /me)
 	UpdateMe(c *gin.Context)
+	// Delete own account
+	// (POST /me/delete)
+	DeleteMe(c *gin.Context)
+	// Paginated login history
+	// (GET /me/login-history)
+	GetMeLoginHistory(c *gin.Context, params GetMeLoginHistoryParams)
+	// Revoke all sessions
+	// (DELETE /me/sessions)
+	DeleteMeSessions(c *gin.Context)
+	// List active sessions
+	// (GET /me/sessions)
+	GetMeSessions(c *gin.Context, params GetMeSessionsParams)
+	// Revoke a specific session
+	// (DELETE /me/sessions/{id})
+	DeleteMeSession(c *gin.Context, id openapi_types.UUID)
 	// Paginated user list with search
 	// (GET /users)
 	ListUsers(c *gin.Context, params ListUsersParams)
@@ -516,6 +585,142 @@ func (siw *ServerInterfaceWrapper) UpdateMe(c *gin.Context) {
 	}
 
 	siw.Handler.UpdateMe(c)
+}
+
+// DeleteMe operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMe(c *gin.Context) {
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteMe(c)
+}
+
+// GetMeLoginHistory operation middleware
+func (siw *ServerInterfaceWrapper) GetMeLoginHistory(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeLoginHistoryParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", c.Request.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter cursor: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", c.Request.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter limit: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMeLoginHistory(c, params)
+}
+
+// DeleteMeSessions operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMeSessions(c *gin.Context) {
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteMeSessions(c)
+}
+
+// GetMeSessions operation middleware
+func (siw *ServerInterfaceWrapper) GetMeSessions(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMeSessionsParams
+
+	headers := c.Request.Header
+
+	// ------------- Optional header parameter "X-Session-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Session-Token")]; found {
+		var XSessionToken string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandler(c, fmt.Errorf("Expected one value for X-Session-Token, got %d", n), http.StatusBadRequest)
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Session-Token", valueList[0], &XSessionToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter X-Session-Token: %w", err), http.StatusBadRequest)
+			return
+		}
+
+		params.XSessionToken = &XSessionToken
+
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetMeSessions(c, params)
+}
+
+// DeleteMeSession operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMeSession(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", c.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	c.Set(string(BearerAuthScopes), []string{})
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.DeleteMeSession(c, id)
 }
 
 // ListUsers operation middleware
@@ -708,6 +913,11 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.POST(options.BaseURL+"/auth/register", wrapper.Register)
 	router.GET(options.BaseURL+"/me", wrapper.GetMe)
 	router.PATCH(options.BaseURL+"/me", wrapper.UpdateMe)
+	router.POST(options.BaseURL+"/me/delete", wrapper.DeleteMe)
+	router.GET(options.BaseURL+"/me/login-history", wrapper.GetMeLoginHistory)
+	router.DELETE(options.BaseURL+"/me/sessions", wrapper.DeleteMeSessions)
+	router.GET(options.BaseURL+"/me/sessions", wrapper.GetMeSessions)
+	router.DELETE(options.BaseURL+"/me/sessions/:id", wrapper.DeleteMeSession)
 	router.GET(options.BaseURL+"/users", wrapper.ListUsers)
 	router.GET(options.BaseURL+"/users/:id", wrapper.GetUser)
 	router.POST(options.BaseURL+"/users/:id/disable", wrapper.DisableUser)
@@ -1336,6 +1546,265 @@ func (response UpdateMe500JSONResponse) VisitUpdateMeResponse(w http.ResponseWri
 	return err
 }
 
+type DeleteMeRequestObject struct {
+	Body *DeleteMeJSONRequestBody
+}
+
+type DeleteMeResponseObject interface {
+	VisitDeleteMeResponse(w http.ResponseWriter) error
+}
+
+type DeleteMe204Response struct {
+}
+
+func (response DeleteMe204Response) VisitDeleteMeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMe400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response DeleteMe400JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe401JSONResponse Error
+
+func (response DeleteMe401JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMe500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteMe500JSONResponse) VisitDeleteMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeLoginHistoryRequestObject struct {
+	Params GetMeLoginHistoryParams
+}
+
+type GetMeLoginHistoryResponseObject interface {
+	VisitGetMeLoginHistoryResponse(w http.ResponseWriter) error
+}
+
+type GetMeLoginHistory200JSONResponse LoginHistoryResponse
+
+func (response GetMeLoginHistory200JSONResponse) VisitGetMeLoginHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeLoginHistory401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetMeLoginHistory401JSONResponse) VisitGetMeLoginHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeLoginHistory500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetMeLoginHistory500JSONResponse) VisitGetMeLoginHistoryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeSessionsRequestObject struct {
+}
+
+type DeleteMeSessionsResponseObject interface {
+	VisitDeleteMeSessionsResponse(w http.ResponseWriter) error
+}
+
+type DeleteMeSessions204Response struct {
+}
+
+func (response DeleteMeSessions204Response) VisitDeleteMeSessionsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMeSessions401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeleteMeSessions401JSONResponse) VisitDeleteMeSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeSessions500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteMeSessions500JSONResponse) VisitDeleteMeSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeSessionsRequestObject struct {
+	Params GetMeSessionsParams
+}
+
+type GetMeSessionsResponseObject interface {
+	VisitGetMeSessionsResponse(w http.ResponseWriter) error
+}
+
+type GetMeSessions200JSONResponse SessionsResponse
+
+func (response GetMeSessions200JSONResponse) VisitGetMeSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeSessions401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response GetMeSessions401JSONResponse) VisitGetMeSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMeSessions500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response GetMeSessions500JSONResponse) VisitGetMeSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeSessionRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteMeSessionResponseObject interface {
+	VisitDeleteMeSessionResponse(w http.ResponseWriter) error
+}
+
+type DeleteMeSession204Response struct {
+}
+
+func (response DeleteMeSession204Response) VisitDeleteMeSessionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMeSession401JSONResponse struct{ UnauthenticatedJSONResponse }
+
+func (response DeleteMeSession401JSONResponse) VisitDeleteMeSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeSession404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response DeleteMeSession404JSONResponse) VisitDeleteMeSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMeSession500JSONResponse struct{ InternalErrorJSONResponse }
+
+func (response DeleteMeSession500JSONResponse) VisitDeleteMeSessionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListUsersRequestObject struct {
 	Params ListUsersParams
 }
@@ -1814,6 +2283,21 @@ type StrictServerInterface interface {
 	// Update display name and/or avatar URL
 	// (PATCH /me)
 	UpdateMe(ctx context.Context, request UpdateMeRequestObject) (UpdateMeResponseObject, error)
+	// Delete own account
+	// (POST /me/delete)
+	DeleteMe(ctx context.Context, request DeleteMeRequestObject) (DeleteMeResponseObject, error)
+	// Paginated login history
+	// (GET /me/login-history)
+	GetMeLoginHistory(ctx context.Context, request GetMeLoginHistoryRequestObject) (GetMeLoginHistoryResponseObject, error)
+	// Revoke all sessions
+	// (DELETE /me/sessions)
+	DeleteMeSessions(ctx context.Context, request DeleteMeSessionsRequestObject) (DeleteMeSessionsResponseObject, error)
+	// List active sessions
+	// (GET /me/sessions)
+	GetMeSessions(ctx context.Context, request GetMeSessionsRequestObject) (GetMeSessionsResponseObject, error)
+	// Revoke a specific session
+	// (DELETE /me/sessions/{id})
+	DeleteMeSession(ctx context.Context, request DeleteMeSessionRequestObject) (DeleteMeSessionResponseObject, error)
 	// Paginated user list with search
 	// (GET /users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -2184,6 +2668,139 @@ func (sh *strictHandler) UpdateMe(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(UpdateMeResponseObject); ok {
 		if err := validResponse.VisitUpdateMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMe operation middleware
+func (sh *strictHandler) DeleteMe(ctx *gin.Context) {
+	var request DeleteMeRequestObject
+
+	var body DeleteMeJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(ctx, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMe(ctx, request.(DeleteMeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMe")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteMeResponseObject); ok {
+		if err := validResponse.VisitDeleteMeResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeLoginHistory operation middleware
+func (sh *strictHandler) GetMeLoginHistory(ctx *gin.Context, params GetMeLoginHistoryParams) {
+	var request GetMeLoginHistoryRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeLoginHistory(ctx, request.(GetMeLoginHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeLoginHistory")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetMeLoginHistoryResponseObject); ok {
+		if err := validResponse.VisitGetMeLoginHistoryResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMeSessions operation middleware
+func (sh *strictHandler) DeleteMeSessions(ctx *gin.Context) {
+	var request DeleteMeSessionsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMeSessions(ctx, request.(DeleteMeSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMeSessions")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteMeSessionsResponseObject); ok {
+		if err := validResponse.VisitDeleteMeSessionsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMeSessions operation middleware
+func (sh *strictHandler) GetMeSessions(ctx *gin.Context, params GetMeSessionsParams) {
+	var request GetMeSessionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMeSessions(ctx, request.(GetMeSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMeSessions")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetMeSessionsResponseObject); ok {
+		if err := validResponse.VisitGetMeSessionsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMeSession operation middleware
+func (sh *strictHandler) DeleteMeSession(ctx *gin.Context, id openapi_types.UUID) {
+	var request DeleteMeSessionRequestObject
+
+	request.Id = id
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMeSession(ctx, request.(DeleteMeSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMeSession")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(DeleteMeSessionResponseObject); ok {
+		if err := validResponse.VisitDeleteMeSessionResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {
