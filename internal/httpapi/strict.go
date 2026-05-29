@@ -72,10 +72,14 @@ func (s *StrictServer) Login(ctx context.Context, request api.LoginRequestObject
 		return nil, errors.New("app not in context")
 	}
 
+	ip, _ := gc.Get("client_ip")
+	ua, _ := gc.Get("user_agent")
+	ipStr, _ := ip.(string)
+	uaStr, _ := ua.(string)
 	tokens, err := s.AuthSvc.Login(
 		ctx, app.ID,
 		string(request.Body.Email), request.Body.Password,
-		app.JWTAudience, "", "",
+		app.JWTAudience, ipStr, uaStr,
 	)
 	if err != nil {
 		switch {
@@ -110,7 +114,12 @@ func (s *StrictServer) Login(ctx context.Context, request api.LoginRequestObject
 
 func (s *StrictServer) Logout(ctx context.Context, request api.LogoutRequestObject) (api.LogoutResponseObject, error) {
 	// Logout is idempotent; always return success.
-	_ = s.AuthSvc.Logout(ctx, request.Body.RefreshToken, "", "")
+	gc := ctx.(*gin.Context)
+	ip, _ := gc.Get("client_ip")
+	ua, _ := gc.Get("user_agent")
+	ipStr, _ := ip.(string)
+	uaStr, _ := ua.(string)
+	_ = s.AuthSvc.Logout(ctx, request.Body.RefreshToken, ipStr, uaStr)
 
 	return api.Logout200JSONResponse{
 		LoggedOut: api.LogoutResponseLoggedOutTrue,
@@ -559,7 +568,11 @@ var rateLimitOps = map[string]struct {
 func StrictAuthMiddleware(signer *authpkg.Signer) api.StrictMiddlewareFunc {
 	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
 		if !authRequiredOps[operationID] {
-			return f
+			return func(ctx *gin.Context, request any) (any, error) {
+				ctx.Set("client_ip", ctx.ClientIP())
+				ctx.Set("user_agent", ctx.GetHeader("User-Agent"))
+				return f(ctx, request)
+			}
 		}
 		return func(ctx *gin.Context, request any) (any, error) {
 			header := ctx.GetHeader("Authorization")
@@ -573,6 +586,8 @@ func StrictAuthMiddleware(signer *authpkg.Signer) api.StrictMiddlewareFunc {
 				return nil, &AppError{Status: 401, Code: "INVALID_TOKEN", Message: "Invalid or expired token"}
 			}
 			ctx.Set("auth.claims", claims)
+			ctx.Set("client_ip", ctx.ClientIP())
+			ctx.Set("user_agent", ctx.GetHeader("User-Agent"))
 			return f(ctx, request)
 		}
 	}
