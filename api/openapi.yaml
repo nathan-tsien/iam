@@ -287,6 +287,131 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /me/sessions:
+    get:
+      operationId: getMeSessions
+      summary: List active sessions
+      tags: [profile]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Session-Token
+          in: header
+          description: Current refresh token (used to identify the current session)
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteMeSessions
+      summary: Revoke all sessions
+      tags: [profile]
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: All sessions revoked
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /me/sessions/{id}:
+    delete:
+      operationId: deleteMeSession
+      summary: Revoke a specific session
+      tags: [profile]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Session (refresh token) UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /me/login-history:
+    get:
+      operationId: getMeLoginHistory
+      summary: Paginated login history
+      tags: [profile]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          description: Cursor from previous response (ISO 8601 timestamp)
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Number of results per page (1-100, default 20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Login history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginHistoryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /me/delete:
+    post:
+      operationId: deleteMe
+      summary: Delete own account
+      tags: [profile]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteMeRequest"
+      responses:
+        "204":
+          description: Account deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /users:
     get:
       operationId: listUsers
@@ -673,6 +798,81 @@ components:
         enabled:
           type: boolean
           enum: [true]
+
+    Session:
+      type: object
+      required: [id, created_at, is_current]
+      properties:
+        id:
+          type: string
+          format: uuid
+        device_label:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        ip:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_current:
+          type: boolean
+
+    SessionsResponse:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+
+    LoginEventSchema:
+      type: object
+      required: [id, kind, occurred_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        ip:
+          type: string
+          nullable: true
+        user_agent:
+          type: string
+          nullable: true
+        occurred_at:
+          type: string
+          format: date-time
+
+    LoginHistoryResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoginEventSchema"
+        next_cursor:
+          type: string
+          format: date-time
+          nullable: true
+
+    DeleteMeRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
 
     Error:
       type: object
