@@ -68,7 +68,7 @@ func (r *Repo) Create(ctx context.Context, u *model.User) error {
 func (r *Repo) FindByEmail(ctx context.Context, appID uuid.UUID, email string) (*model.User, error) {
 	var u model.User
 	err := r.DB.WithContext(ctx).
-		Where("app_id = ? AND email_lower = ?", appID, strings.ToLower(email)).
+		Where("app_id = ? AND email_lower = ? AND deleted_at IS NULL", appID, strings.ToLower(email)).
 		First(&u).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
@@ -80,7 +80,7 @@ func (r *Repo) FindByEmail(ctx context.Context, appID uuid.UUID, email string) (
 func (r *Repo) FindByID(ctx context.Context, appID, id uuid.UUID) (*model.User, error) {
 	var u model.User
 	err := r.DB.WithContext(ctx).
-		Where("app_id = ? AND id = ?", appID, id).
+		Where("app_id = ? AND id = ? AND deleted_at IS NULL", appID, id).
 		First(&u).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrNotFound
@@ -168,6 +168,25 @@ func SetDisabledAtTx(tx *gorm.DB, appID, id uuid.UUID, at *time.Time) (changed b
 	}
 	res := tx.Model(&model.User{}).Where(where, appID, id).Update("disabled_at", at)
 	return res.RowsAffected == 1, res.Error
+}
+
+// SoftDelete marks a user as deleted and anonymizes PII. Idempotent.
+func (r *Repo) SoftDelete(ctx context.Context, appID, id uuid.UUID) error {
+	res := r.DB.WithContext(ctx).Model(&model.User{}).
+		Where("app_id = ? AND id = ? AND deleted_at IS NULL", appID, id).
+		Updates(map[string]any{
+			"deleted_at":  gorm.Expr("NOW()"),
+			"disabled_at": gorm.Expr("NOW()"),
+			"email":       fmt.Sprintf("deleted-%s@invalid", id),
+			"email_lower": fmt.Sprintf("deleted-%s@invalid", id),
+			"display_name": nil,
+			"avatar_url":   nil,
+			"updated_at":   gorm.Expr("NOW()"),
+		})
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return res.Error
 }
 
 func isUniqueViolation(err error) bool {

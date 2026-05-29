@@ -34,6 +34,7 @@ func (User) TableName() string { return "users" }
 
 func (u *User) EmailVerified() bool { return u.EmailVerifiedAt != nil }
 func (u *User) Disabled() bool      { return u.DisabledAt != nil }
+func (u *User) Deleted() bool       { return u.DeletedAt != nil }
 
 func (u *User) ApplicantName() string {
 	if u.DisplayName != nil && *u.DisplayName != "" {
