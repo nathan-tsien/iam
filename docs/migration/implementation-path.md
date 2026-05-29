@@ -20,7 +20,7 @@ Companion artifacts:
 ## Current position
 
 ```
-Done:  Waves 1–4
+Done:  Waves 1–4 + OpenAPI codegen migration
 Next:  Wave 5 — sessions, history, account deletion
 ```
 

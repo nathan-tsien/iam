@@ -8,9 +8,9 @@
 ## Overview
 
 - Start date: 2026-05-27
-- Current phase: Phase 1 (Wave 4 complete; OpenAPI codegen in progress)
+- Current phase: Phase 1 (Waves 1–4 + OpenAPI codegen complete)
 - Progress: 7 / 19
-- Last updated: 2026-05-30 (P1-T6 OpenAPI codegen migration)
+- Last updated: 2026-05-30 (OpenAPI codegen migration complete)
 
 ## Phase 0 · Design decisions (0.5d)
 
