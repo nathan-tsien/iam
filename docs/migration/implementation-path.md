@@ -20,8 +20,8 @@ Companion artifacts:
 ## Current position
 
 ```
-Done:  Waves 1–4 + OpenAPI codegen migration
-Next:  Wave 5 — sessions, history, account deletion
+Done:  Waves 1–5 + OpenAPI codegen migration
+Next:  Wave 6 — webhook outbox, dispatch worker
 ```
 
 ## Working assumptions (not yet ADR-0003)
