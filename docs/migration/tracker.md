@@ -8,9 +8,9 @@
 ## Overview
 
 - Start date: 2026-05-27
-- Current phase: Phase 1 (Wave 4 complete)
-- Progress: 6 / 19
-- Last updated: 2026-05-29 (Wave 4 complete)
+- Current phase: Phase 1 (Wave 4 complete; OpenAPI codegen in progress)
+- Progress: 7 / 19
+- Last updated: 2026-05-30 (P1-T6 OpenAPI codegen migration)
 
 ## Phase 0 · Design decisions (0.5d)
 
@@ -81,14 +81,14 @@
   - PR: ·
   - note: ·
 
-- [ ] **P1-T6** iam-openapi-slice — OpenAPI under `/v1/apps/{slug}/...`; codegen; app-scoped + super-admin admin routes
-  - status: todo
+- [x] **P1-T6** iam-openapi-slice — OpenAPI under `/v1/apps/{slug}/...`; codegen; app-scoped + super-admin admin routes
+  - status: done
   - blocked-by: P1-T5
-  - started: ·
-  - finished: ·
-  - commit: ·
+  - started: 2026-05-30
+  - finished: 2026-05-30
+  - commit: feat/openapi-codegen-migration branch
   - PR: ·
-  - note: ·
+  - note: OpenAPI spec, oapi-codegen, StrictServerInterface, strict middleware, old handler removal.
 
 - [ ] **P1-T7** sessions-and-account — Sessions list/revoke, login history, self-delete (soft + anonymize + webhook)
   - status: todo
