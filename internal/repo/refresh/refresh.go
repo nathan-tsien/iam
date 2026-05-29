@@ -160,6 +160,40 @@ func RevokeAllForUserTx(tx *gorm.DB, userID uuid.UUID) (int64, error) {
 	return res.RowsAffected, res.Error
 }
 
+// RevokeAllForUserInApp revokes all active refresh tokens for a user within a specific app.
+func (r *Repo) RevokeAllForUserInApp(ctx context.Context, userID, appID uuid.UUID) error {
+	res := r.DB.WithContext(ctx).Model(&Token{}).
+		Where("user_id = ? AND app_id = ? AND revoked_at IS NULL", userID, appID).
+		Update("revoked_at", time.Now().UTC())
+	return res.Error
+}
+
+// ListActive returns non-expired, non-revoked refresh tokens for a user within an app.
+func (r *Repo) ListActive(ctx context.Context, userID, appID uuid.UUID) ([]Token, error) {
+	var tokens []Token
+	err := r.DB.WithContext(ctx).
+		Where("user_id = ? AND app_id = ? AND revoked_at IS NULL AND expires_at > NOW()", userID, appID).
+		Order("last_seen_at DESC NULLS LAST, created_at DESC").
+		Find(&tokens).Error
+	return tokens, err
+}
+
+// RevokeByID marks a specific token as revoked by its ID.
+// Ownership check: only revokes if the token belongs to the given user.
+// Returns changed=false if not found or already revoked.
+func (r *Repo) RevokeByID(ctx context.Context, id, userID uuid.UUID) (bool, error) {
+	now := time.Now()
+	res := r.DB.WithContext(ctx).Model(&Token{}).
+		Where("id = ? AND user_id = ? AND revoked_at IS NULL", id, userID).
+		Update("revoked_at", now)
+	return res.RowsAffected > 0, res.Error
+}
+
+// TokenHash returns the SHA-256 hash of a plaintext token.
+func TokenHash(plain string) string {
+	return hashToken(plain)
+}
+
 func randomToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
