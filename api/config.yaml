@@ -1,0 +1,6 @@
+package: api
+generate:
+  gin-server: true
+  strict-server: true
+  models: true
+output: api/iam.gen.go
