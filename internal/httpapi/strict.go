@@ -3,13 +3,17 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	api "github.com/nathan-tsien/iam/api"
+	authpkg "github.com/nathan-tsien/iam/internal/auth"
 	"github.com/nathan-tsien/iam/internal/middleware"
 	"github.com/nathan-tsien/iam/internal/model"
+	"github.com/nathan-tsien/iam/internal/ratelimit"
 	"github.com/nathan-tsien/iam/internal/repo/user"
 	"github.com/nathan-tsien/iam/internal/service/auth"
 	"github.com/nathan-tsien/iam/internal/service/useradmin"
@@ -507,6 +511,124 @@ func userToAPI(u *model.User) api.User {
 // ptrMap wraps a map in a pointer for use with Error.Details.
 func ptrMap(m map[string]interface{}) *map[string]interface{} {
 	return &m
+}
+
+// --- Strict middleware ---
+
+// AppError is returned by strict middleware to signal HTTP errors.
+type AppError struct {
+	Status  int
+	Code    string
+	Message string
+}
+
+func (e *AppError) Error() string { return e.Message }
+
+// Operations that require authentication.
+var authRequiredOps = map[string]bool{
+	"GetMe":                true,
+	"UpdateMe":             true,
+	"ListUsers":            true,
+	"GetUser":              true,
+	"DisableUser":          true,
+	"EnableUser":           true,
+	"TriggerPasswordReset": true,
+}
+
+// Operations that require admin role (subset of auth-required).
+var adminRequiredOps = map[string]bool{
+	"ListUsers":            true,
+	"GetUser":              true,
+	"DisableUser":          true,
+	"EnableUser":           true,
+	"TriggerPasswordReset": true,
+}
+
+// Rate limit config per operation.
+var rateLimitOps = map[string]struct {
+	Max    int64
+	Window time.Duration
+}{
+	"Register":       {Max: 3, Window: time.Minute},
+	"Login":          {Max: 5, Window: time.Minute},
+	"ForgotPassword": {Max: 3, Window: time.Minute},
+	"ListUsers":      {Max: 100, Window: time.Minute},
+}
+
+// StrictAuthMiddleware verifies the bearer token for auth-required operations.
+func StrictAuthMiddleware(signer *authpkg.Signer) api.StrictMiddlewareFunc {
+	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
+		if !authRequiredOps[operationID] {
+			return f
+		}
+		return func(ctx *gin.Context, request any) (any, error) {
+			header := ctx.GetHeader("Authorization")
+			const prefix = "Bearer "
+			if !strings.HasPrefix(header, prefix) {
+				return nil, &AppError{Status: 401, Code: "UNAUTHENTICATED", Message: "Missing bearer token"}
+			}
+			token := strings.TrimPrefix(header, prefix)
+			claims, err := signer.Verify(token)
+			if err != nil {
+				return nil, &AppError{Status: 401, Code: "INVALID_TOKEN", Message: "Invalid or expired token"}
+			}
+			ctx.Set("auth.claims", claims)
+			return f(ctx, request)
+		}
+	}
+}
+
+// StrictAdminMiddleware verifies admin role for admin-required operations.
+func StrictAdminMiddleware(userRepo *user.Repo) api.StrictMiddlewareFunc {
+	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
+		if !adminRequiredOps[operationID] {
+			return f
+		}
+		return func(ctx *gin.Context, request any) (any, error) {
+			claims, ok := middleware.GetAuthClaims(ctx)
+			if !ok {
+				return nil, &AppError{Status: 401, Code: "UNAUTHENTICATED", Message: "Missing auth claims"}
+			}
+			app, ok := middleware.GetApp(ctx)
+			if !ok {
+				return nil, &AppError{Status: 500, Code: "INTERNAL", Message: "App not in context"}
+			}
+			u, err := userRepo.FindByID(ctx.Request.Context(), app.ID, claims.UserID())
+			if err != nil {
+				return nil, &AppError{Status: 401, Code: "USER_NOT_FOUND", Message: "User not found"}
+			}
+			if u.Disabled() {
+				return nil, &AppError{Status: 403, Code: "ACCOUNT_DISABLED", Message: "Account is disabled"}
+			}
+			if u.Role != model.RoleAdmin {
+				return nil, &AppError{Status: 403, Code: "FORBIDDEN", Message: "Admin access required"}
+			}
+			ctx.Set("admin.user", u)
+			return f(ctx, request)
+		}
+	}
+}
+
+// StrictRateLimitMiddleware applies per-operation rate limiting.
+func StrictRateLimitMiddleware(store ratelimit.Store) api.StrictMiddlewareFunc {
+	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
+		cfg, ok := rateLimitOps[operationID]
+		if !ok || store == nil {
+			return f
+		}
+		return func(ctx *gin.Context, request any) (any, error) {
+			app, _ := middleware.GetApp(ctx)
+			key := app.ID.String() + ":" + operationID
+			allowed, _, err := ratelimit.Allow(ctx.Request.Context(), store, key, cfg.Max, cfg.Window)
+			if err != nil {
+				return f(ctx, request) // fail open
+			}
+			if !allowed {
+				return nil, &AppError{Status: 429, Code: "RATE_LIMITED", Message: "Too many requests"}
+			}
+			return f(ctx, request)
+		}
+	}
 }
 
 // Ensure StrictServer implements api.StrictServerInterface at compile time.

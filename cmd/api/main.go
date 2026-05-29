@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,9 +14,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
+	api "github.com/nathan-tsien/iam/api"
 	pkgauth "github.com/nathan-tsien/iam/internal/auth"
 	"github.com/nathan-tsien/iam/internal/config"
 	"github.com/nathan-tsien/iam/internal/db"
+	"github.com/nathan-tsien/iam/internal/errs"
 	"github.com/nathan-tsien/iam/internal/httpapi"
 	"github.com/nathan-tsien/iam/internal/middleware"
 	"github.com/nathan-tsien/iam/internal/provider/mail"
@@ -107,9 +110,8 @@ func main() {
 	appRepo := apprepo.NewRepo(gormDB)
 	v1 := router.Group("/v1/apps/:slug")
 	v1.Use(middleware.AppSlugMiddleware(appRepo))
-	httpapi.RegisterAuth(v1, authSvc, rlStore)
 
-	// --- Wave 4: self-service + admin ---
+	// --- Services ---
 	auditRepo := auditlogrepo.NewRepo(gormDB)
 	profileSvc := userprofilesvc.NewService(userprofilesvc.Deps{UserRepo: userRepo})
 	adminSvc := useradminsvc.NewService(useradminsvc.Deps{
@@ -118,16 +120,34 @@ func main() {
 		OTP:       otpSvc,
 	})
 
-	// /me routes (auth required)
-	me := v1.Group("")
-	me.Use(middleware.Auth(signer))
-	httpapi.RegisterMe(me, profileSvc)
+	// --- Strict server ---
+	strictServer := &httpapi.StrictServer{
+		AuthSvc:    authSvc,
+		ProfileSvc: profileSvc,
+		AdminSvc:   adminSvc,
+	}
 
-	// /users routes (auth + admin required)
-	admin := v1.Group("")
-	admin.Use(middleware.Auth(signer))
-	admin.Use(middleware.AdminRole(userRepo))
-	httpapi.RegisterUsers(admin, adminSvc, rlStore)
+	middlewares := []api.StrictMiddlewareFunc{
+		httpapi.StrictRateLimitMiddleware(rlStore),
+		httpapi.StrictAuthMiddleware(signer),
+		httpapi.StrictAdminMiddleware(userRepo),
+	}
+
+	strictHandler := api.NewStrictHandlerWithOptions(strictServer, middlewares, api.StrictGinServerOptions{
+		RequestErrorHandlerFunc: func(c *gin.Context, err error) {
+			errs.Render(c, errs.New(http.StatusBadRequest, "INVALID_REQUEST", err.Error()))
+		},
+		HandlerErrorFunc: func(c *gin.Context, err error) {
+			var appErr *httpapi.AppError
+			if errors.As(err, &appErr) {
+				errs.Render(c, errs.New(appErr.Status, appErr.Code, appErr.Message))
+				return
+			}
+			errs.Render(c, errs.New(http.StatusInternalServerError, "INTERNAL", "Internal server error").WithCause(err))
+		},
+	})
+
+	api.RegisterHandlers(v1, strictHandler)
 
 	// --- Server ---
 	addr := fmt.Sprintf(":%d", cfg.AppPort)
