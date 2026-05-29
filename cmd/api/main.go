@@ -22,12 +22,15 @@ import (
 	"github.com/nathan-tsien/iam/internal/ratelimit"
 	"github.com/nathan-tsien/iam/internal/ratelimit/memory"
 	ratelimitredis "github.com/nathan-tsien/iam/internal/ratelimit/redis"
+	auditlogrepo "github.com/nathan-tsien/iam/internal/repo/auditlog"
 	apprepo "github.com/nathan-tsien/iam/internal/repo/app"
 	logineventrepo "github.com/nathan-tsien/iam/internal/repo/loginevent"
 	refreshrepo "github.com/nathan-tsien/iam/internal/repo/refresh"
 	userrepo "github.com/nathan-tsien/iam/internal/repo/user"
 	authsvc "github.com/nathan-tsien/iam/internal/service/auth"
 	"github.com/nathan-tsien/iam/internal/service/otp"
+	useradminsvc "github.com/nathan-tsien/iam/internal/service/useradmin"
+	userprofilesvc "github.com/nathan-tsien/iam/internal/service/userprofile"
 )
 
 func main() {
@@ -105,6 +108,26 @@ func main() {
 	v1 := router.Group("/v1/apps/:slug")
 	v1.Use(middleware.AppSlugMiddleware(appRepo))
 	httpapi.RegisterAuth(v1, authSvc, rlStore)
+
+	// --- Wave 4: self-service + admin ---
+	auditRepo := auditlogrepo.NewRepo(gormDB)
+	profileSvc := userprofilesvc.NewService(userprofilesvc.Deps{UserRepo: userRepo})
+	adminSvc := useradminsvc.NewService(useradminsvc.Deps{
+		UserRepo:  userRepo,
+		AuditRepo: auditRepo,
+		OTP:       otpSvc,
+	})
+
+	// /me routes (auth required)
+	me := v1.Group("")
+	me.Use(middleware.Auth(signer))
+	httpapi.RegisterMe(me, profileSvc)
+
+	// /users routes (auth + admin required)
+	admin := v1.Group("")
+	admin.Use(middleware.Auth(signer))
+	admin.Use(middleware.AdminRole(userRepo))
+	httpapi.RegisterUsers(admin, adminSvc, rlStore)
 
 	// --- Server ---
 	addr := fmt.Sprintf(":%d", cfg.AppPort)

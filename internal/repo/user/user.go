@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -187,4 +188,102 @@ func uniqueViolationConstraint(err error) string {
 		}
 	}
 	return ""
+}
+
+// UpdateProfile patches display_name and/or avatar_url for the given user.
+// Nil fields are skipped.
+func (r *Repo) UpdateProfile(ctx context.Context, appID, id uuid.UUID, displayName, avatarURL *string) error {
+	updates := map[string]any{
+		"updated_at": gorm.Expr("NOW()"),
+	}
+	if displayName != nil {
+		updates["display_name"] = *displayName
+	}
+	if avatarURL != nil {
+		updates["avatar_url"] = *avatarURL
+	}
+	res := r.DB.WithContext(ctx).Model(&model.User{}).
+		Where("app_id = ? AND id = ?", appID, id).
+		Updates(updates)
+	if res.Error != nil {
+		if displayName != nil && isUniqueViolation(res.Error) {
+			return ErrDisplayNameTaken
+		}
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// CountActiveAdmins returns the number of non-disabled admin users in the app.
+func (r *Repo) CountActiveAdmins(ctx context.Context, appID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.DB.WithContext(ctx).
+		Model(&model.User{}).
+		Where("app_id = ? AND role = 'admin' AND disabled_at IS NULL", appID).
+		Count(&count).Error
+	return count, err
+}
+
+// List returns paginated users with optional search query.
+// When query is non-empty, matches against email_lower and display_name (ILIKE).
+// Cursor is the ID of the last item from the previous page; empty for the first page.
+func (r *Repo) List(ctx context.Context, filter ListFilter) (*ListPage, error) {
+	if filter.Limit <= 0 || filter.Limit > 100 {
+		filter.Limit = 20
+	}
+
+	q := r.DB.WithContext(ctx).Model(&model.User{}).Where("app_id = ?", filter.AppID)
+
+	if filter.Q != "" {
+		like := "%" + filter.Q + "%"
+		q = q.Where("(email_lower ILIKE ? OR display_name ILIKE ?)", like, like)
+	}
+	if filter.Role != nil {
+		q = q.Where("role = ?", string(*filter.Role))
+	}
+	if filter.Status != nil {
+		switch *filter.Status {
+		case StatusActive:
+			q = q.Where("disabled_at IS NULL")
+		case StatusDisabled:
+			q = q.Where("disabled_at IS NOT NULL")
+		}
+	}
+
+	// Count total before pagination.
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	// Cursor pagination: fetch items after the cursor.
+	if filter.Cursor != "" {
+		cursorID, err := uuid.Parse(filter.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor: %w", err)
+		}
+		q = q.Where("id > ?", cursorID)
+	}
+
+	q = q.Order("created_at ASC, id ASC").Limit(filter.Limit + 1)
+
+	var users []model.User
+	if err := q.Find(&users).Error; err != nil {
+		return nil, err
+	}
+
+	page := &ListPage{
+		Items: users,
+		Total: total,
+	}
+
+	if len(users) > filter.Limit {
+		page.Items = users[:filter.Limit]
+		page.NextCursor = users[filter.Limit].ID.String()
+	}
+
+	return page, nil
 }
