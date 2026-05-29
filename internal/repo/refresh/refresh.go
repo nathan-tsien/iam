@@ -17,13 +17,19 @@ var ErrNotFound = errors.New("refresh token not found, revoked, or expired")
 
 // Token mirrors iam.refresh_tokens.
 type Token struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID    uuid.UUID `gorm:"type:uuid;not null"`
-	AppID     uuid.UUID `gorm:"type:uuid;not null;index"`
-	TokenHash string    `gorm:"not null"`
-	IssuedAt  time.Time `gorm:"autoCreateTime"`
-	ExpiresAt time.Time `gorm:"not null"`
-	RevokedAt *time.Time
+	ID          uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID      uuid.UUID  `gorm:"type:uuid;not null"`
+	AppID       uuid.UUID  `gorm:"type:uuid;not null;index"`
+	TokenHash   string     `gorm:"not null"`
+	IssuedAt    time.Time  `gorm:"autoCreateTime"`
+	ExpiresAt   time.Time  `gorm:"not null"`
+	RevokedAt   *time.Time
+	ReplacedBy  *uuid.UUID `gorm:"type:uuid"`
+	DeviceLabel *string
+	UserAgent   string
+	IP          string
+	LastSeenAt  *time.Time
+	CreatedAt   time.Time  `gorm:"autoCreateTime"`
 }
 
 func (Token) TableName() string { return "refresh_tokens" }
@@ -34,8 +40,15 @@ type Repo struct {
 
 func NewRepo(db *gorm.DB) *Repo { return &Repo{DB: db} }
 
+// TokenMetadata holds optional session metadata for a refresh token.
+type TokenMetadata struct {
+	DeviceLabel string
+	UserAgent   string
+	IP          string
+}
+
 // Generate issues a new refresh token for userID within an app.
-func (r *Repo) Generate(ctx context.Context, appID, userID uuid.UUID, ttl time.Duration) (string, error) {
+func (r *Repo) Generate(ctx context.Context, appID, userID uuid.UUID, ttl time.Duration, meta ...TokenMetadata) (string, error) {
 	plain, err := randomToken()
 	if err != nil {
 		return "", err
@@ -45,6 +58,13 @@ func (r *Repo) Generate(ctx context.Context, appID, userID uuid.UUID, ttl time.D
 		AppID:     appID,
 		TokenHash: hashToken(plain),
 		ExpiresAt: time.Now().Add(ttl),
+	}
+	if len(meta) > 0 {
+		if meta[0].DeviceLabel != "" {
+			row.DeviceLabel = &meta[0].DeviceLabel
+		}
+		row.UserAgent = meta[0].UserAgent
+		row.IP = meta[0].IP
 	}
 	if err := r.DB.WithContext(ctx).Create(row).Error; err != nil {
 		return "", err
@@ -116,6 +136,8 @@ func (r *Repo) Rotate(ctx context.Context, oldPlain string, ttl time.Duration) (
 			AppID:     old.AppID,
 			TokenHash: hashToken(nPlain),
 			ExpiresAt: now.Add(ttl),
+			UserAgent: old.UserAgent,
+			IP:        old.IP,
 		}).Error
 	})
 	if err == nil && notFound {
