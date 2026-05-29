@@ -33,15 +33,6 @@ func (s *StrictServer) CheckAvailability(ctx context.Context, request api.CheckA
 		return nil, errors.New("app not in context")
 	}
 
-	if request.Body == nil {
-		return api.CheckAvailability400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
-	}
-
 	var email, displayName string
 	if request.Body.Email != nil {
 		email = string(*request.Body.Email)
@@ -75,15 +66,6 @@ func (s *StrictServer) Login(ctx context.Context, request api.LoginRequestObject
 	app, ok := middleware.GetApp(gc)
 	if !ok {
 		return nil, errors.New("app not in context")
-	}
-
-	if request.Body == nil {
-		return api.Login400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
 	}
 
 	tokens, err := s.AuthSvc.Login(
@@ -123,15 +105,6 @@ func (s *StrictServer) Login(ctx context.Context, request api.LoginRequestObject
 }
 
 func (s *StrictServer) Logout(ctx context.Context, request api.LogoutRequestObject) (api.LogoutResponseObject, error) {
-	if request.Body == nil {
-		return api.Logout400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
-	}
-
 	// Logout is idempotent; always return success.
 	_ = s.AuthSvc.Logout(ctx, request.Body.RefreshToken, "", "")
 
@@ -145,15 +118,6 @@ func (s *StrictServer) VerifyOTP(ctx context.Context, request api.VerifyOTPReque
 	app, ok := middleware.GetApp(gc)
 	if !ok {
 		return nil, errors.New("app not in context")
-	}
-
-	if request.Body == nil {
-		return api.VerifyOTP400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
 	}
 
 	if err := s.AuthSvc.VerifyRegisterOTP(ctx, app.ID, string(request.Body.Email), request.Body.Code); err != nil {
@@ -177,15 +141,6 @@ func (s *StrictServer) ForgotPassword(ctx context.Context, request api.ForgotPas
 		return nil, errors.New("app not in context")
 	}
 
-	if request.Body == nil {
-		return api.ForgotPassword400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
-	}
-
 	// Always return success to prevent user enumeration.
 	_ = s.AuthSvc.ForgotPassword(ctx, app.ID, string(request.Body.Email))
 
@@ -199,15 +154,6 @@ func (s *StrictServer) ResetPassword(ctx context.Context, request api.ResetPassw
 	app, ok := middleware.GetApp(gc)
 	if !ok {
 		return nil, errors.New("app not in context")
-	}
-
-	if request.Body == nil {
-		return api.ResetPassword400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
 	}
 
 	err := s.AuthSvc.ResetPassword(
@@ -245,15 +191,6 @@ func (s *StrictServer) RefreshToken(ctx context.Context, request api.RefreshToke
 		return nil, errors.New("app not in context")
 	}
 
-	if request.Body == nil {
-		return api.RefreshToken400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
-	}
-
 	tokens, err := s.AuthSvc.Refresh(ctx, request.Body.RefreshToken, app.JWTAudience)
 	if err != nil {
 		switch {
@@ -263,7 +200,7 @@ func (s *StrictServer) RefreshToken(ctx context.Context, request api.RefreshToke
 				Message: "Invalid or expired refresh token",
 			}, nil
 		case errors.Is(err, auth.ErrAccountDisabled):
-			return api.RefreshToken401JSONResponse{
+			return api.RefreshToken403JSONResponse{
 				Code:    "ACCOUNT_DISABLED",
 				Message: "Account is disabled",
 			}, nil
@@ -286,15 +223,6 @@ func (s *StrictServer) Register(ctx context.Context, request api.RegisterRequest
 	app, ok := middleware.GetApp(gc)
 	if !ok {
 		return nil, errors.New("app not in context")
-	}
-
-	if request.Body == nil {
-		return api.Register400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
 	}
 
 	resp, err := s.AuthSvc.Register(
@@ -372,15 +300,6 @@ func (s *StrictServer) UpdateMe(ctx context.Context, request api.UpdateMeRequest
 	claims, ok := middleware.GetAuthClaims(gc)
 	if !ok {
 		return nil, errors.New("auth claims not in context")
-	}
-
-	if request.Body == nil {
-		return api.UpdateMe400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
-				Code:    "INVALID_REQUEST",
-				Message: "Request body is required",
-			},
-		}, nil
 	}
 
 	if request.Body.DisplayName == nil && request.Body.AvatarUrl == nil {

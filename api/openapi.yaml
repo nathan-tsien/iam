@@ -154,6 +154,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403":
+          description: Account disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -520,10 +526,10 @@ components:
     CheckAvailabilityResponse:
       type: object
       properties:
-        EmailAvailable:
+        email_available:
           type: boolean
           nullable: true
-        DisplayNameAvailable:
+        display_name_available:
           type: boolean
           nullable: true
 

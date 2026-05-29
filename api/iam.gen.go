@@ -124,8 +124,8 @@ type CheckAvailabilityRequest struct {
 
 // CheckAvailabilityResponse defines model for CheckAvailabilityResponse.
 type CheckAvailabilityResponse struct {
-	DisplayNameAvailable *bool `json:"DisplayNameAvailable,omitempty"`
-	EmailAvailable       *bool `json:"EmailAvailable,omitempty"`
+	DisplayNameAvailable *bool `json:"display_name_available,omitempty"`
+	EmailAvailable       *bool `json:"email_available,omitempty"`
 }
 
 // DisabledResponse defines model for DisabledResponse.
@@ -1099,6 +1099,20 @@ func (response RefreshToken401JSONResponse) VisitRefreshTokenResponse(w http.Res
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RefreshToken403JSONResponse Error
+
+func (response RefreshToken403JSONResponse) VisitRefreshTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
