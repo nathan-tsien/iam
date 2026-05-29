@@ -32,6 +32,7 @@ import (
 	userrepo "github.com/nathan-tsien/iam/internal/repo/user"
 	authsvc "github.com/nathan-tsien/iam/internal/service/auth"
 	"github.com/nathan-tsien/iam/internal/service/otp"
+	sessionssvc "github.com/nathan-tsien/iam/internal/service/sessions"
 	useradminsvc "github.com/nathan-tsien/iam/internal/service/useradmin"
 	userprofilesvc "github.com/nathan-tsien/iam/internal/service/userprofile"
 )
@@ -113,7 +114,15 @@ func main() {
 
 	// --- Services ---
 	auditRepo := auditlogrepo.NewRepo(gormDB)
-	profileSvc := userprofilesvc.NewService(userprofilesvc.Deps{UserRepo: userRepo})
+	profileSvc := userprofilesvc.NewService(userprofilesvc.Deps{
+		UserRepo:    userRepo,
+		RefreshRepo: refreshRepo,
+		AuditRepo:   auditRepo,
+	})
+	sessionsSvc := sessionssvc.NewService(sessionssvc.Deps{
+		RefreshRepo:    refreshRepo,
+		LoginEventRepo: loginEventRepo,
+	})
 	adminSvc := useradminsvc.NewService(useradminsvc.Deps{
 		UserRepo:  userRepo,
 		AuditRepo: auditRepo,
@@ -122,9 +131,10 @@ func main() {
 
 	// --- Strict server ---
 	strictServer := &httpapi.StrictServer{
-		AuthSvc:    authSvc,
-		ProfileSvc: profileSvc,
-		AdminSvc:   adminSvc,
+		AuthSvc:     authSvc,
+		ProfileSvc:  profileSvc,
+		AdminSvc:    adminSvc,
+		SessionsSvc: sessionsSvc,
 	}
 
 	middlewares := []api.StrictMiddlewareFunc{
