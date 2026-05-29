@@ -38,3 +38,33 @@ func (r *Repo) Record(ctx context.Context, appID uuid.UUID, userID *uuid.UUID, k
 	}
 	return r.DB.WithContext(ctx).Create(e).Error
 }
+
+// ListByUser returns login events for a user within an app, paginated by occurred_at cursor.
+// Cursor is the occurred_at timestamp of the last item; pass zero time for the first page.
+// Returns events and the cursor for the next page (nil if no more).
+func (r *Repo) ListByUser(ctx context.Context, userID, appID uuid.UUID, cursor time.Time, limit int) ([]Event, *time.Time, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	q := r.DB.WithContext(ctx).
+		Where("user_id = ? AND app_id = ?", userID, appID)
+
+	if !cursor.IsZero() {
+		q = q.Where("occurred_at < ?", cursor)
+	}
+
+	var events []Event
+	err := q.Order("occurred_at DESC").Limit(limit + 1).Find(&events).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var nextCursor *time.Time
+	if len(events) > limit {
+		nextCursor = &events[limit-1].OccurredAt
+		events = events[:limit]
+	}
+
+	return events, nextCursor, nil
+}
