@@ -519,12 +519,11 @@ components:
 
     CheckAvailabilityResponse:
       type: object
-      required: [email_available, display_name_available]
       properties:
-        email_available:
-          type: boolean
-        display_name_available:
-          type: boolean
+        EmailAvailable:
+          type: ["boolean", "null"]
+        DisplayNameAvailable:
+          type: ["boolean", "null"]
 
     VerifyOTPRequest:
       type: object
