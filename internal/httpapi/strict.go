@@ -14,8 +14,10 @@ import (
 	"github.com/nathan-tsien/iam/internal/middleware"
 	"github.com/nathan-tsien/iam/internal/model"
 	"github.com/nathan-tsien/iam/internal/ratelimit"
+	"github.com/nathan-tsien/iam/internal/repo/refresh"
 	"github.com/nathan-tsien/iam/internal/repo/user"
 	"github.com/nathan-tsien/iam/internal/service/auth"
+	"github.com/nathan-tsien/iam/internal/service/sessions"
 	"github.com/nathan-tsien/iam/internal/service/useradmin"
 	"github.com/nathan-tsien/iam/internal/service/userprofile"
 )
@@ -23,9 +25,10 @@ import (
 // StrictServer implements api.StrictServerInterface, bridging generated
 // request/response types to the domain services.
 type StrictServer struct {
-	AuthSvc    *auth.Service
-	ProfileSvc *userprofile.Service
-	AdminSvc   *useradmin.Service
+	AuthSvc     *auth.Service
+	ProfileSvc  *userprofile.Service
+	AdminSvc    *useradmin.Service
+	SessionsSvc *sessions.Service
 }
 
 // --- Auth endpoints ---
@@ -341,6 +344,167 @@ func (s *StrictServer) UpdateMe(ctx context.Context, request api.UpdateMeRequest
 	return api.UpdateMe200JSONResponse(userToAPI(profile)), nil
 }
 
+// --- Session and account endpoints (auth required) ---
+
+func (s *StrictServer) GetMeSessions(ctx context.Context, request api.GetMeSessionsRequestObject) (api.GetMeSessionsResponseObject, error) {
+	gc := ctx.(*gin.Context)
+	app, ok := middleware.GetApp(gc)
+	if !ok {
+		return nil, errors.New("app not in context")
+	}
+	claims, ok := middleware.GetAuthClaims(gc)
+	if !ok {
+		return nil, errors.New("auth claims not in context")
+	}
+
+	var currentHash string
+	if token := request.Params.XSessionToken; token != nil {
+		currentHash = refresh.TokenHash(*token)
+	}
+
+	sess, err := s.SessionsSvc.ListSessions(ctx, claims.UserID(), app.ID, currentHash)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]api.Session, len(sess))
+	for i, se := range sess {
+		item := api.Session{
+			Id:        openapi_types.UUID(se.ID),
+			CreatedAt: se.CreatedAt,
+			IsCurrent: se.IsCurrent,
+		}
+		if se.DeviceLabel != nil {
+			item.DeviceLabel = se.DeviceLabel
+		}
+		if se.UserAgent != "" {
+			item.UserAgent = &se.UserAgent
+		}
+		if se.IP != "" {
+			item.Ip = &se.IP
+		}
+		if se.LastSeenAt != nil {
+			item.LastSeenAt = se.LastSeenAt
+		}
+		items[i] = item
+	}
+
+	return api.GetMeSessions200JSONResponse{Sessions: items}, nil
+}
+
+func (s *StrictServer) DeleteMeSession(ctx context.Context, request api.DeleteMeSessionRequestObject) (api.DeleteMeSessionResponseObject, error) {
+	gc := ctx.(*gin.Context)
+	claims, ok := middleware.GetAuthClaims(gc)
+	if !ok {
+		return nil, errors.New("auth claims not in context")
+	}
+
+	if err := s.SessionsSvc.RevokeSession(ctx, claims.UserID(), request.Id); err != nil {
+		if errors.Is(err, sessions.ErrNotFound) {
+			return api.DeleteMeSession404JSONResponse{
+				NotFoundJSONResponse: api.NotFoundJSONResponse{
+					Code:    "SESSION_NOT_FOUND",
+					Message: "Session not found",
+				},
+			}, nil
+		}
+		return nil, err
+	}
+
+	return api.DeleteMeSession204Response{}, nil
+}
+
+func (s *StrictServer) DeleteMeSessions(ctx context.Context, request api.DeleteMeSessionsRequestObject) (api.DeleteMeSessionsResponseObject, error) {
+	gc := ctx.(*gin.Context)
+	app, ok := middleware.GetApp(gc)
+	if !ok {
+		return nil, errors.New("app not in context")
+	}
+	claims, ok := middleware.GetAuthClaims(gc)
+	if !ok {
+		return nil, errors.New("auth claims not in context")
+	}
+
+	if err := s.SessionsSvc.RevokeAllSessions(ctx, claims.UserID(), app.ID); err != nil {
+		return nil, err
+	}
+
+	return api.DeleteMeSessions204Response{}, nil
+}
+
+func (s *StrictServer) GetMeLoginHistory(ctx context.Context, request api.GetMeLoginHistoryRequestObject) (api.GetMeLoginHistoryResponseObject, error) {
+	gc := ctx.(*gin.Context)
+	app, ok := middleware.GetApp(gc)
+	if !ok {
+		return nil, errors.New("app not in context")
+	}
+	claims, ok := middleware.GetAuthClaims(gc)
+	if !ok {
+		return nil, errors.New("auth claims not in context")
+	}
+
+	limit := 20
+	if request.Params.Limit != nil && *request.Params.Limit > 0 && *request.Params.Limit <= 100 {
+		limit = *request.Params.Limit
+	}
+
+	var cursor time.Time
+	if request.Params.Cursor != nil {
+		cursor = *request.Params.Cursor
+	}
+
+	events, nextCursor, err := s.SessionsSvc.LoginHistory(ctx, claims.UserID(), app.ID, cursor, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]api.LoginEventSchema, len(events))
+	for i, e := range events {
+		item := api.LoginEventSchema{
+			Id:         openapi_types.UUID(e.ID),
+			Kind:       e.Kind,
+			OccurredAt: e.OccurredAt,
+		}
+		if e.IP != "" {
+			item.Ip = &e.IP
+		}
+		if e.UserAgent != "" {
+			item.UserAgent = &e.UserAgent
+		}
+		items[i] = item
+	}
+
+	resp := api.GetMeLoginHistory200JSONResponse{Events: items}
+	if nextCursor != nil {
+		resp.NextCursor = nextCursor
+	}
+	return resp, nil
+}
+
+func (s *StrictServer) DeleteMe(ctx context.Context, request api.DeleteMeRequestObject) (api.DeleteMeResponseObject, error) {
+	gc := ctx.(*gin.Context)
+	app, ok := middleware.GetApp(gc)
+	if !ok {
+		return nil, errors.New("app not in context")
+	}
+	claims, ok := middleware.GetAuthClaims(gc)
+	if !ok {
+		return nil, errors.New("auth claims not in context")
+	}
+
+	if err := s.ProfileSvc.DeleteAccount(ctx, app.ID, claims.UserID(), request.Body.Password); err != nil {
+		if errors.Is(err, userprofile.ErrInvalidPassword) {
+			return api.DeleteMe401JSONResponse{
+				Code:    "INVALID_PASSWORD",
+				Message: "Invalid password",
+			}, nil
+		}
+		return nil, err
+	}
+
+	return api.DeleteMe204Response{}, nil
+}
+
 // --- Admin endpoints (auth + admin role required) ---
 
 func (s *StrictServer) ListUsers(ctx context.Context, request api.ListUsersRequestObject) (api.ListUsersResponseObject, error) {
@@ -542,6 +706,11 @@ var authRequiredOps = map[string]bool{
 	"DisableUser":          true,
 	"EnableUser":           true,
 	"TriggerPasswordReset": true,
+	"GetMeSessions":        true,
+	"DeleteMeSession":      true,
+	"DeleteMeSessions":     true,
+	"GetMeLoginHistory":    true,
+	"DeleteMe":             true,
 }
 
 // Operations that require admin role (subset of auth-required).
@@ -562,6 +731,7 @@ var rateLimitOps = map[string]struct {
 	"Login":          {Max: 5, Window: time.Minute},
 	"ForgotPassword": {Max: 3, Window: time.Minute},
 	"ListUsers":      {Max: 100, Window: time.Minute},
+	"DeleteMe":       {Max: 5, Window: time.Minute},
 }
 
 // StrictAuthMiddleware verifies the bearer token for auth-required operations.
