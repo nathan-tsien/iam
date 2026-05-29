@@ -122,8 +122,8 @@ func (s *Service) Register(ctx context.Context, appID uuid.UUID, email, plaintex
 }
 
 type AvailabilityResult struct {
-	EmailAvailable       *bool
-	DisplayNameAvailable *bool
+	EmailAvailable       *bool `json:"email_available"`
+	DisplayNameAvailable *bool `json:"display_name_available"`
 }
 
 func (s *Service) CheckAvailability(ctx context.Context, appID uuid.UUID, email, displayName string) (*AvailabilityResult, error) {
