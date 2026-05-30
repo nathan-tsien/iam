@@ -58,7 +58,7 @@ func (s *Service) ListSessions(ctx context.Context, userID, appID uuid.UUID, cur
 			DeviceLabel: t.DeviceLabel,
 			UserAgent:   t.UserAgent,
 			IP:          t.IP,
-			CreatedAt:   t.IssuedAt,
+			CreatedAt:   t.CreatedAt,
 			LastSeenAt:  t.LastSeenAt,
 			IsCurrent:   currentTokenHash != "" && t.TokenHash == currentTokenHash,
 		}
