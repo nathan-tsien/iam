@@ -81,6 +81,10 @@ func main() {
 		mailer = &mail.LogMailer{}
 	}
 	otpSvc := otp.NewService(gormDB, mailer, 10*time.Minute)
+	if cfg.AppEnv != "production" && cfg.DevOTPCode != "" {
+		otpSvc.FixedCode = cfg.DevOTPCode
+		slog.Info("dev fixed OTP code enabled", "code", cfg.DevOTPCode)
+	}
 	signer := pkgauth.NewSigner(cfg.JWTSecret, cfg.JWTTTL)
 	loginEventRepo := logineventrepo.NewRepo(gormDB)
 	authSvc := authsvc.NewService(authsvc.Deps{

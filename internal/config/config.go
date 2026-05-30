@@ -22,6 +22,7 @@ type Config struct {
 	SMTPPassword   string
 	SMTPFromAddr   string
 	SMTPFromName   string
+	DevOTPCode     string
 }
 
 // Load reads configuration from environment variables.
@@ -99,5 +100,6 @@ func Load() (Config, error) {
 		SMTPPassword:   os.Getenv("SMTP_PASSWORD"),
 		SMTPFromAddr:   os.Getenv("SMTP_FROM_ADDR"),
 		SMTPFromName:   os.Getenv("SMTP_FROM_NAME"),
+		DevOTPCode:     os.Getenv("DEV_OTP_CODE"),
 	}, nil
 }
