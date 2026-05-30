@@ -21,7 +21,6 @@ type Token struct {
 	UserID      uuid.UUID  `gorm:"type:uuid;not null"`
 	AppID       uuid.UUID  `gorm:"type:uuid;not null;index"`
 	TokenHash   string     `gorm:"not null"`
-	IssuedAt    time.Time  `gorm:"autoCreateTime"`
 	ExpiresAt   time.Time  `gorm:"not null"`
 	RevokedAt   *time.Time
 	ReplacedBy  *uuid.UUID `gorm:"type:uuid"`
